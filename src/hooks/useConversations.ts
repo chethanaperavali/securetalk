@@ -107,22 +107,26 @@ export function useConversations() {
       // Generate a conversation ID first
       const conversationId = crypto.randomUUID();
 
-      // Add both participants first (so RLS will allow conversation access)
-      const { error: partError } = await supabase
-        .from('conversation_participants')
-        .insert([
-          { conversation_id: conversationId, user_id: user.id },
-          { conversation_id: conversationId, user_id: profile.user_id },
-        ]);
-
-      if (partError) throw partError;
-
-      // Create the conversation with the same ID
+      // Create the conversation first (INSERT has permissive policy)
       const { error: convError } = await supabase
         .from('conversations')
         .insert({ id: conversationId });
 
       if (convError) throw convError;
+
+      // Add current user as participant first (allows user_id = auth.uid())
+      const { error: selfPartError } = await supabase
+        .from('conversation_participants')
+        .insert({ conversation_id: conversationId, user_id: user.id });
+
+      if (selfPartError) throw selfPartError;
+
+      // Now add the other participant (allowed because current user is already a participant)
+      const { error: otherPartError } = await supabase
+        .from('conversation_participants')
+        .insert({ conversation_id: conversationId, user_id: profile.user_id });
+
+      if (otherPartError) throw otherPartError;
 
       // Generate and store encryption key for this conversation
       const key = await generateKey();
