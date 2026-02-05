@@ -532,10 +532,4 @@
  
  ---
  
- ## License
  
- This project is private and proprietary.
- 
- ---
- 
- *Built with ❤️ using Lovable*
