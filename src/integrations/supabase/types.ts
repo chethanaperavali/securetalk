@@ -68,6 +68,7 @@ export type Database = {
         Row: {
           conversation_id: string
           created_at: string
+          edited_at: string | null
           encrypted_content: string
           id: string
           iv: string
@@ -77,6 +78,7 @@ export type Database = {
         Insert: {
           conversation_id: string
           created_at?: string
+          edited_at?: string | null
           encrypted_content: string
           id?: string
           iv: string
@@ -86,6 +88,7 @@ export type Database = {
         Update: {
           conversation_id?: string
           created_at?: string
+          edited_at?: string | null
           encrypted_content?: string
           id?: string
           iv?: string
