@@ -8,7 +8,13 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { TypingIndicator } from '@/components/chat/TypingIndicator';
-import { Shield, Send, Lock, Loader2 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import { Shield, Send, Lock, Loader2, MoreVertical, Pencil, Trash2, X, Check } from 'lucide-react';
 import { format } from 'date-fns';
 
 interface ChatViewProps {
@@ -17,10 +23,13 @@ interface ChatViewProps {
 
 export function ChatView({ conversationId }: ChatViewProps) {
   const { user } = useAuth();
-  const { messages, isLoading, sendMessage, isEncryptionReady } = useMessages(conversationId);
+  const { messages, isLoading, sendMessage, editMessage, deleteMessage, isEncryptionReady } =
+    useMessages(conversationId);
   const { conversations } = useConversations();
   const { otherUserTyping, setTyping } = useTypingIndicator(conversationId);
   const [newMessage, setNewMessage] = useState('');
+  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
+  const [editContent, setEditContent] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const conversation = conversations.find((c) => c.id === conversationId);
@@ -37,7 +46,6 @@ export function ChatView({ conversationId }: ChatViewProps) {
 
   const handleSend = async () => {
     if (!newMessage.trim() || sendMessage.isPending) return;
-
     try {
       setTyping(false);
       await sendMessage.mutateAsync(newMessage.trim());
@@ -45,6 +53,30 @@ export function ChatView({ conversationId }: ChatViewProps) {
     } catch (error) {
       console.error('Failed to send message:', error);
     }
+  };
+
+  const handleEdit = async () => {
+    if (!editingMessageId || !editContent.trim()) return;
+    try {
+      await editMessage.mutateAsync({ messageId: editingMessageId, content: editContent.trim() });
+      setEditingMessageId(null);
+      setEditContent('');
+    } catch (error) {
+      console.error('Failed to edit message:', error);
+    }
+  };
+
+  const handleDelete = async (messageId: string) => {
+    try {
+      await deleteMessage.mutateAsync(messageId);
+    } catch (error) {
+      console.error('Failed to delete message:', error);
+    }
+  };
+
+  const startEditing = (messageId: string, currentContent: string) => {
+    setEditingMessageId(messageId);
+    setEditContent(currentContent);
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -118,29 +150,84 @@ export function ChatView({ conversationId }: ChatViewProps) {
           <div className="space-y-4">
             {messages.map((message) => {
               const isOwnMessage = message.sender_id === user?.id;
+              const isEditing = editingMessageId === message.id;
 
               return (
                 <div
                   key={message.id}
-                  className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'}`}
+                  className={`flex ${isOwnMessage ? 'justify-end' : 'justify-start'} group`}
                 >
-                  <div
-                    className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${
-                      isOwnMessage
-                        ? 'gradient-secure text-primary-foreground rounded-br-md'
-                        : 'bg-secondary text-secondary-foreground rounded-bl-md'
-                    }`}
-                  >
-                    <p className="text-sm whitespace-pre-wrap break-words">
-                      {message.decrypted_content}
-                    </p>
-                    <p
-                      className={`text-[10px] mt-1 ${
-                        isOwnMessage ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                  <div className={`flex items-start gap-1 max-w-[75%] ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+                    <div
+                      className={`rounded-2xl px-4 py-2.5 ${
+                        isOwnMessage
+                          ? 'gradient-secure text-primary-foreground rounded-br-md'
+                          : 'bg-secondary text-secondary-foreground rounded-bl-md'
                       }`}
                     >
-                      {format(new Date(message.created_at), 'HH:mm')}
-                    </p>
+                      {isEditing ? (
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={editContent}
+                            onChange={(e) => setEditContent(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') handleEdit();
+                              if (e.key === 'Escape') setEditingMessageId(null);
+                            }}
+                            className="h-7 text-sm bg-background/20 border-primary-foreground/30 text-inherit"
+                            autoFocus
+                          />
+                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={handleEdit}>
+                            <Check className="w-3.5 h-3.5" />
+                          </Button>
+                          <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => setEditingMessageId(null)}>
+                            <X className="w-3.5 h-3.5" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <p className="text-sm whitespace-pre-wrap break-words">
+                          {message.decrypted_content}
+                        </p>
+                      )}
+                      <div className={`flex items-center gap-1 mt-1`}>
+                        <p
+                          className={`text-[10px] ${
+                            isOwnMessage ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                          }`}
+                        >
+                          {format(new Date(message.created_at), 'HH:mm')}
+                          {message.edited_at && ' · edited'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Edit/Delete menu for own messages */}
+                    {isOwnMessage && !isEditing && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            className="h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity shrink-0"
+                          >
+                            <MoreVertical className="w-3.5 h-3.5 text-muted-foreground" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-32">
+                          <DropdownMenuItem onClick={() => startEditing(message.id, message.decrypted_content || '')}>
+                            <Pencil className="w-3.5 h-3.5 mr-2" />
+                            Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => handleDelete(message.id)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5 mr-2" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </div>
               );
