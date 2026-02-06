@@ -151,11 +151,53 @@ export function useMessages(conversationId: string | null) {
     },
   });
 
+  const editMessage = useMutation({
+    mutationFn: async ({ messageId, content }: { messageId: string; content: string }) => {
+      if (!user || !encryptionKey) throw new Error('Not ready');
+
+      const { encrypted, iv } = await encryptMessage(content, encryptionKey);
+
+      const { error } = await supabase
+        .from('messages')
+        .update({
+          encrypted_content: encrypted,
+          iv: iv,
+          edited_at: new Date().toISOString(),
+        })
+        .eq('id', messageId)
+        .eq('sender_id', user.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+    },
+  });
+
+  const deleteMessage = useMutation({
+    mutationFn: async (messageId: string) => {
+      if (!user) throw new Error('Not authenticated');
+
+      const { error } = await supabase
+        .from('messages')
+        .delete()
+        .eq('id', messageId)
+        .eq('sender_id', user.id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+    },
+  });
+
   return {
     messages: query.data || [],
     isLoading: query.isLoading,
     error: query.error,
     sendMessage,
+    editMessage,
+    deleteMessage,
     isEncryptionReady: !!encryptionKey,
   };
 }
