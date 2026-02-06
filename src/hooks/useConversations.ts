@@ -128,9 +128,13 @@ export function useConversations() {
 
       if (otherPartError) throw otherPartError;
 
-      // Generate and store encryption key for this conversation
+      // Generate and store encryption key in the database and locally
       const key = await generateKey();
       const keyString = await exportKey(key);
+      await supabase
+        .from('conversations')
+        .update({ encryption_key: keyString })
+        .eq('id', conversationId);
       storeConversationKey(conversationId, keyString);
 
       return { id: conversationId };

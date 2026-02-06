@@ -27,19 +27,39 @@ export function useMessages(conversationId: string | null) {
   const queryClient = useQueryClient();
   const [encryptionKey, setEncryptionKey] = useState<CryptoKey | null>(null);
 
-  // Initialize or load encryption key for this conversation
+  // Initialize or load encryption key for this conversation from database
   useEffect(() => {
     async function initKey() {
       if (!conversationId) return;
 
-      const storedKey = getConversationKey(conversationId);
-      if (storedKey) {
-        const key = await importKey(storedKey);
+      // First check localStorage cache
+      const cachedKey = getConversationKey(conversationId);
+      if (cachedKey) {
+        const key = await importKey(cachedKey);
+        setEncryptionKey(key);
+        return;
+      }
+
+      // Fetch from database
+      const { data } = await supabase
+        .from('conversations')
+        .select('encryption_key')
+        .eq('id', conversationId)
+        .single();
+
+      if (data?.encryption_key) {
+        // Use the shared key from the database
+        storeConversationKey(conversationId, data.encryption_key);
+        const key = await importKey(data.encryption_key);
         setEncryptionKey(key);
       } else {
-        // Generate a new key for this conversation
+        // Generate a new key and store it in the database
         const key = await generateKey();
         const keyString = await exportKey(key);
+        await supabase
+          .from('conversations')
+          .update({ encryption_key: keyString })
+          .eq('id', conversationId);
         storeConversationKey(conversationId, keyString);
         setEncryptionKey(key);
       }
